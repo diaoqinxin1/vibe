@@ -1,12 +1,19 @@
 @import "tailwindcss";
 
 :root {
-  color-scheme: light;
+  color-scheme: dark;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
 body {
   margin: 0;
+}
+
+.arcade-bg {
+  background:
+    radial-gradient(ellipse 60% 40% at 50% 0%, rgba(16, 185, 129, 0.16), transparent 70%),
+    radial-gradient(ellipse 50% 35% at 90% 90%, rgba(6, 182, 212, 0.1), transparent 70%),
+    linear-gradient(160deg, #070b14 0%, #0a1120 55%, #070b14 100%);
 }
 
 .snake-head {
@@ -57,33 +64,43 @@ body {
   }
 }
 
-/* 全屏游玩：舞台铺满屏幕，棋盘按可用空间等比缩放并居中 */
+/* 原生全屏：舞台铺满屏幕，棋盘按可用空间等比缩放并居中 */
 .game-stage:fullscreen {
   width: 100vw;
   height: 100vh;
   max-width: none;
   padding: clamp(12px, 2.5vmin, 32px);
   gap: clamp(12px, 2vmin, 24px);
-  background: #070d18;
+  background: #05080f;
   overflow: hidden;
 }
 
-.game-stage:fullscreen .game-board {
-  width: min(94vw, calc(100vh - 190px));
-  max-width: min(94vw, calc(100vh - 190px));
+/* CSS 模拟全屏：供 iOS Safari 等不支持元素级 Fullscreen API 的浏览器使用 */
+.game-stage.css-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  padding: clamp(10px, 2.5vmin, 28px);
+  gap: clamp(8px, 1.8vmin, 20px);
+  overflow: hidden;
+}
+
+.game-stage:fullscreen .game-board,
+.game-stage.css-fullscreen .game-board {
+  width: min(94vw, calc(100vh - 230px));
+  max-width: min(94vw, calc(100vh - 230px));
   height: auto;
   border-radius: clamp(12px, 2vmin, 28px);
 }
 
-.game-stage:fullscreen section {
-  color: #e2e8f0;
-}
-
-.game-stage:fullscreen section span,
-.game-stage:fullscreen section p {
-  color: #94a3b8;
-}
-
-.game-stage:fullscreen .text-slate-500 {
-  color: #94a3b8;
+/* 手机竖屏下给控制区留出更多棋盘空间 */
+@media (max-width: 640px) {
+  .game-stage:fullscreen .game-board,
+  .game-stage.css-fullscreen .game-board {
+    width: min(94vw, calc(100dvh - 250px));
+    max-width: min(94vw, calc(100dvh - 250px));
+  }
 }
