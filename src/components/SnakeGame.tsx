@@ -19,6 +19,7 @@ import {
   type Direction,
   type GameState,
 } from "@/lib/snake";
+import { getCloud, type ScoreRow } from "@/lib/cloud";
 
 const KEY_TO_DIRECTION: Record<string, Direction> = {
   arrowup: "up",
@@ -58,27 +59,98 @@ type Cell = {
   index: number;
 };
 
+type CloudMessage = { text: string; failed: boolean };
+
 export default function SnakeGame() {
   const [game, setGame] = useState<GameState>(createInitialGame);
   const best = useSyncExternalStore(subscribeBest, readBestScore, () => 0);
+  const [playerName, setPlayerName] = useState("匿名玩家");
+  const [leaderboard, setLeaderboard] = useState<ScoreRow[]>([]);
+  const [boardLoading, setBoardLoading] = useState(true);
+  const [cloudMessage, setCloudMessage] = useState<CloudMessage | null>(null);
 
   const directionRef = useRef<Direction>("right");
   const queueRef = useRef<Direction[]>([]);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const submittedRef = useRef(false);
 
   useEffect(() => {
     if (game.score > readBestScore()) writeBestScore(game.score);
   }, [game.score]);
 
+  const loadBoard = useCallback(async () => {
+    try {
+      const { data, error } = await getCloud()
+        .database.from("snake_scores")
+        .select("id, player_name, score, created_at")
+        .order("score", { ascending: false })
+        .order("created_at", { ascending: true })
+        .limit(10);
+
+      if (error) {
+        setCloudMessage({ text: "云端排行榜读取失败，请稍后刷新。", failed: true });
+        return;
+      }
+      setLeaderboard((data ?? []) as ScoreRow[]);
+      setBoardLoading(false);
+    } catch {
+      setCloudMessage({ text: "云端连接失败，请检查网络后刷新。", failed: true });
+      setBoardLoading(false);
+    }
+  }, []);
+
+  const submitScore = useCallback(
+    async (name: string, score: number) => {
+      const safeName = name.trim().slice(0, 20) || "匿名玩家";
+      try {
+        const { error } = await getCloud()
+          .database.from("snake_scores")
+          .insert({ player_name: safeName, score });
+
+        if (error) {
+          setCloudMessage({ text: "成绩上传失败，可点击重试。", failed: true });
+          return;
+        }
+        setCloudMessage({ text: "成绩已同步到云端排行榜。", failed: false });
+        await loadBoard();
+      } catch {
+        setCloudMessage({ text: "成绩上传失败，可点击重试。", failed: true });
+      }
+    },
+    [loadBoard],
+  );
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadBoard();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadBoard]);
+
+  useEffect(() => {
+    const ended = game.status === "gameover" || game.status === "win";
+    if (ended && game.score > 0 && !submittedRef.current) {
+      submittedRef.current = true;
+      const timer = window.setTimeout(() => {
+        void submitScore(playerName, game.score);
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+  }, [game.status, game.score, playerName, submitScore]);
+
   const startGame = useCallback(() => {
     directionRef.current = "right";
     queueRef.current = [];
+    submittedRef.current = false;
+    setCloudMessage(null);
     setGame({ ...createInitialGame(), status: "playing" });
   }, []);
 
   const resetGame = useCallback(() => {
     directionRef.current = "right";
     queueRef.current = [];
+    submittedRef.current = false;
+    setCloudMessage(null);
     setGame(createInitialGame());
   }, []);
 
@@ -345,6 +417,87 @@ export default function SnakeGame() {
               手机端可在棋盘上滑动
             </p>
           </div>
+        </section>
+
+        <section className="w-full max-w-xl rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm backdrop-blur sm:p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-base font-bold text-slate-800">云端排行榜</h2>
+              <p className="mt-1 text-xs text-slate-500">
+                每局结束后自动上传，展示全部玩家的前 10 名。
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <label htmlFor="player-name" className="shrink-0 text-xs text-slate-500">
+                玩家名
+              </label>
+              <input
+                id="player-name"
+                value={playerName}
+                onChange={(event) => setPlayerName(event.target.value)}
+                maxLength={20}
+                className="w-28 rounded-lg border border-slate-200 px-2 py-1.5 text-sm text-slate-800 outline-none focus:border-emerald-400"
+              />
+              <button
+                type="button"
+                onClick={() => void loadBoard()}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-emerald-400 hover:text-emerald-600"
+              >
+                刷新
+              </button>
+            </div>
+          </div>
+
+          {cloudMessage && (
+            <div
+              className={`mt-3 flex flex-wrap items-center gap-2 text-xs ${
+                cloudMessage.failed ? "text-rose-600" : "text-emerald-600"
+              }`}
+            >
+              <span>{cloudMessage.text}</span>
+              {cloudMessage.failed &&
+                game.score > 0 &&
+                (game.status === "gameover" || game.status === "win") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      submittedRef.current = true;
+                      void submitScore(playerName, game.score);
+                    }}
+                    className="font-semibold underline"
+                  >
+                    重试上传
+                  </button>
+                )}
+            </div>
+          )}
+
+          {boardLoading ? (
+            <p className="mt-4 text-sm text-slate-500">正在读取云端成绩…</p>
+          ) : leaderboard.length === 0 ? (
+            <p className="mt-4 text-sm text-slate-500">
+              还没有成绩，快来占据第一名。
+            </p>
+          ) : (
+            <ol className="mt-4 space-y-2">
+              {leaderboard.map((row, index) => (
+                <li
+                  key={row.id}
+                  className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="w-5 text-center font-bold text-slate-400">
+                      {index + 1}
+                    </span>
+                    <span className="font-medium text-slate-700">
+                      {row.player_name}
+                    </span>
+                  </span>
+                  <span className="font-bold text-emerald-600">{row.score} 分</span>
+                </li>
+              ))}
+            </ol>
+          )}
         </section>
       </div>
     </main>

@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@tencent-ai/workbuddy-cloud-sdk": "^0.1.4-dev.71e5d1e.202611161655",
     "next": "16.4.6",
     "react": "19.3.0",
     "react-dom": "19.3.0",
