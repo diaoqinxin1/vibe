@@ -58,9 +58,25 @@ export function createFood(snake: Point[]): Point | null {
   return free[Math.floor(Math.random() * free.length)];
 }
 
-export function getTickMs(score: number): number {
-  const level = Math.floor(score / 50);
-  return Math.max(70, 150 - level * 12);
+export type SpeedLevel = "slow" | "normal" | "fast" | "turbo";
+
+export const SPEED_PRESETS: {
+  value: SpeedLevel;
+  label: string;
+  baseTickMs: number;
+}[] = [
+  { value: "slow", label: "慢速", baseTickMs: 220 },
+  { value: "normal", label: "正常", baseTickMs: 150 },
+  { value: "fast", label: "快速", baseTickMs: 100 },
+  { value: "turbo", label: "极速", baseTickMs: 65 },
+];
+
+export function getTickMs(score: number, level: SpeedLevel = "normal"): number {
+  const base =
+    SPEED_PRESETS.find((preset) => preset.value === level)?.baseTickMs ?? 150;
+  // 分数越高略微加速，但在所选档位的基础上进行，避免玩家设置的档位失效
+  const speedUp = Math.floor(score / 50) * 6;
+  return Math.max(40, base - speedUp);
 }
 
 export function getSpeedLevel(score: number): number {

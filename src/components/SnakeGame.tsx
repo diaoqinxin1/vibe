@@ -12,12 +12,13 @@ import {
 import {
   advance,
   createInitialGame,
-  getSpeedLevel,
   getTickMs,
   GRID_SIZE,
   isOpposite,
+  SPEED_PRESETS,
   type Direction,
   type GameState,
+  type SpeedLevel,
 } from "@/lib/snake";
 import { getCloud, type ScoreRow } from "@/lib/cloud";
 
@@ -68,15 +69,39 @@ export default function SnakeGame() {
   const [leaderboard, setLeaderboard] = useState<ScoreRow[]>([]);
   const [boardLoading, setBoardLoading] = useState(true);
   const [cloudMessage, setCloudMessage] = useState<CloudMessage | null>(null);
+  const [speed, setSpeed] = useState<SpeedLevel>("normal");
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const directionRef = useRef<Direction>("right");
   const queueRef = useRef<Direction[]>([]);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const submittedRef = useRef(false);
+  const stageRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (game.score > readBestScore()) writeBestScore(game.score);
   }, [game.score]);
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === stageRef.current);
+    };
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => {
+        setCloudMessage({ text: "退出全屏失败，请按 Esc 键退出。", failed: true });
+      });
+    } else {
+      void stageRef.current?.requestFullscreen().catch(() => {
+        setCloudMessage({ text: "当前浏览器不支持全屏，请手动全屏。", failed: true });
+      });
+    }
+  }, []);
 
   const loadBoard = useCallback(async () => {
     try {
@@ -176,10 +201,10 @@ export default function SnakeGame() {
       const next = queueRef.current.shift() ?? directionRef.current;
       directionRef.current = next;
       setGame((prev) => advance(prev, next));
-    }, getTickMs(game.score));
+    }, getTickMs(game.score, speed));
 
     return () => window.clearInterval(timer);
-  }, [game.status, game.score]);
+  }, [game.status, game.score, speed]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -205,12 +230,29 @@ export default function SnakeGame() {
       if (key === "r") {
         event.preventDefault();
         resetGame();
+        return;
+      }
+
+      if (key === "f") {
+        event.preventDefault();
+        toggleFullscreen();
+        return;
+      }
+
+      if (key === "[" || key === "]") {
+        event.preventDefault();
+        setSpeed((current) => {
+          const index = SPEED_PRESETS.findIndex((item) => item.value === current);
+          const next = key === "[" ? index - 1 : index + 1;
+          const clamped = Math.max(0, Math.min(SPEED_PRESETS.length - 1, next));
+          return SPEED_PRESETS[clamped].value;
+        });
       }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [game.status, queueDirection, startGame, togglePause, resetGame]);
+  }, [game.status, queueDirection, startGame, togglePause, resetGame, toggleFullscreen]);
 
   const cells = useMemo<Cell[]>(() => {
     const occupied = new Map<string, number>();
@@ -333,13 +375,23 @@ export default function SnakeGame() {
           <StatCard label="最高分" value={best} accent="text-cyan-600" />
           <StatCard
             label="速度"
-            value={`Lv.${getSpeedLevel(game.score)}`}
+            value={SPEED_PRESETS.find((item) => item.value === speed)?.label ?? "正常"}
             accent="text-amber-500"
           />
         </section>
 
         <div
-          className="relative w-full max-w-[560px] aspect-square rounded-3xl border border-slate-800 bg-[#0b1220] p-2 shadow-2xl shadow-slate-900/20 sm:p-3"
+          ref={stageRef}
+          className={`game-stage flex w-full max-w-3xl flex-col items-center gap-5 ${
+            isFullscreen
+              ? "justify-center bg-[#070d18] p-4"
+              : ""
+          }`}
+        >
+        <div
+          className={`game-board relative w-full aspect-square rounded-3xl border border-slate-800 bg-[#0b1220] p-2 shadow-2xl shadow-slate-900/20 sm:p-3 ${
+            isFullscreen ? "max-h-[78vh] w-auto max-w-full" : "max-w-[560px]"
+          }`}
           onTouchStart={onTouchStart}
           onTouchEnd={onTouchEnd}
           style={{ touchAction: "none" }}
@@ -418,6 +470,38 @@ export default function SnakeGame() {
             </p>
           </div>
         </section>
+
+        <section className="flex w-full max-w-xl flex-wrap items-center justify-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-slate-500">速度</span>
+            <div className="flex gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+              {SPEED_PRESETS.map((preset) => (
+                <button
+                  key={preset.value}
+                  type="button"
+                  onClick={() => setSpeed(preset.value)}
+                  aria-pressed={speed === preset.value}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                    speed === preset.value
+                      ? "bg-emerald-500 text-white shadow-sm"
+                      : "text-slate-600 hover:bg-emerald-50 hover:text-emerald-600"
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-emerald-400 hover:text-emerald-600 active:scale-95"
+          >
+            <span aria-hidden="true">{isFullscreen ? "⤡" : "⤢"}</span>
+            {isFullscreen ? "退出全屏" : "全屏游戏"}
+          </button>
+        </section>
+        </div>
 
         <section className="w-full max-w-xl rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm backdrop-blur sm:p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

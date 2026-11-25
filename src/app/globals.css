@@ -56,3 +56,34 @@ body {
     opacity: 1;
   }
 }
+
+/* 全屏游玩：舞台铺满屏幕，棋盘按可用空间等比缩放并居中 */
+.game-stage:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  padding: clamp(12px, 2.5vmin, 32px);
+  gap: clamp(12px, 2vmin, 24px);
+  background: #070d18;
+  overflow: hidden;
+}
+
+.game-stage:fullscreen .game-board {
+  width: min(94vw, calc(100vh - 190px));
+  max-width: min(94vw, calc(100vh - 190px));
+  height: auto;
+  border-radius: clamp(12px, 2vmin, 28px);
+}
+
+.game-stage:fullscreen section {
+  color: #e2e8f0;
+}
+
+.game-stage:fullscreen section span,
+.game-stage:fullscreen section p {
+  color: #94a3b8;
+}
+
+.game-stage:fullscreen .text-slate-500 {
+  color: #94a3b8;
+}
